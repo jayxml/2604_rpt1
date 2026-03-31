@@ -1,0 +1,2 @@
+PO_ID,Vendor_ID,Vendor_Country,Vendor_OTIF_Percent,Vendor_Avg_Past_Delay,Material_ID,Material_Group,Criticality_Flag,Plant_ID,Order_Quantity,Net_Price,Planned_Lead_Time_Days,Order_Month,Incoterms,Actual_Delay_Days
+PO200001,VENDOR_C,Vietnam,82,3.0,MAT-1002,Control Chip,Yes,PLANT_1000,2200,195.5,9,11,FOB,[PREDICT]
