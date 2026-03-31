@@ -25,6 +25,29 @@
 
 ---
 
+
+## Architecture Decision Guide: Rule, Predict, Agent, or Embedded AI
+
+This workshop separates architecture choices that are often mixed together in enterprise programs, so solution architects can design by intent rather than by tooling preference.
+
+| Decision Question | Recommended Pattern | Why |
+|------------------|---------------------|-----|
+| Is the problem primarily threshold- and policy-driven? | Deterministic rules/workflow | Lowest complexity and highest control |
+| Is the input mainly structured ERP/tabular data and output is a risk score? | `sap-rpt-1` prediction on AI Core | Best fit for tabular predictive inference |
+| Is adaptive multi-step reasoning needed across tools? | Agentic orchestration with guardrails | Adds value only when workflow is ambiguous |
+| Is capability already available in SAP embedded AI/Joule for the same process? | Adopt embedded capability first | Faster time-to-value and lower operational burden |
+
+### Recommended Decision Sequence for Architects and Developers
+
+1. Start with deterministic process policy.
+2. Add `sap-rpt-1` where predictive signal improves outcomes.
+3. Introduce agentic orchestration only for decisions that need adaptive reasoning.
+4. Keep human approval for any sourcing-impacting action.
+
+> Principle: do not optimize for maximum AI sophistication. Optimize for minimum architecture that reliably delivers business value with clear governance.
+
+---
+
 ## Scenario A: From Notebook to Production CAP Application
 
 ### Use Case A: Production-Grade JIT Risk Dashboard
@@ -569,6 +592,49 @@ Week 6:  Full rollout with all POs
 | **Line-Down Avoidance** | Track avoided incidents | Mitigated POs that would have delayed |
 
 ---
+
+
+## 90-Day Adoption Blueprint (Pilot to Productive Rollout)
+
+This blueprint is optimized for SAP BTP solution architects who need a realistic path from workshop prototype to production value, while giving developers clear implementation sequencing.
+
+| Phase | Timeline | Scope | Primary Owner | Exit Criteria |
+|------|----------|-------|---------------|---------------|
+| **Phase 1: Validation** | Weeks 1-2 | Notebook-based scoring on historical data | Solution Architect + Data/Process SME | Baseline accuracy and risk policy agreed |
+| **Phase 2: Technical Pilot** | Weeks 3-6 | Read-only integration with live S/4HANA data, scoring service hardening | App Developer + Integration Specialist | Stable inference, trace logging, and role-based access |
+| **Phase 3: Business Pilot** | Weeks 7-10 | Planner-facing dashboard + mitigation proposal workflow | Product Owner + Supply Chain Lead | Measurable reduction in risk-to-action cycle time |
+| **Phase 4: Controlled Rollout** | Weeks 11-13 | Event-driven scoring + approval-governed agent recommendations | Enterprise Architect + Operations | Governance sign-off and operational handover complete |
+
+### What Must Be Live vs. Can Stay Mocked in Pilot
+
+| Capability | Pilot Recommendation |
+|-----------|----------------------|
+| Prediction endpoint (`sap-rpt-1`) | Live |
+| S/4 master + transactional feed | Live read-only |
+| Alternative supplier/capacity signal | Live if available, otherwise mocked with explicit caveat |
+| Agentic proposal generation | Start constrained and advisory-only |
+| Final sourcing execution | Keep manual/approval-driven |
+
+---
+
+## Governance and Decision Rights Model
+
+| Layer | Responsibility | Typical Technology | Authority Level |
+|------|----------------|--------------------|-----------------|
+| Prediction layer | Generate risk scores | AI Core + `sap-rpt-1` | Advisory |
+| Policy layer | Translate score into action band | CAP service/business rules | Advisory with controls |
+| Agent layer | Propose mitigation options | Gen AI Hub orchestration + tools | Recommendation only |
+| Approval layer | Accept/reject sourcing-impacting decision | Workflow/BPA + approver role | Authoritative |
+| Execution layer | Perform ERP process change | S/4-integrated app/service | Post-approval only |
+
+### Trade-off Lens for Architecture Design Reviews
+
+| Priority | Lean Toward |
+|---------|-------------|
+| Lowest latency and predictable behavior | Deterministic + predictive scoring |
+| Highest adaptability across edge cases | Agentic recommendations with strict tool and approval guardrails |
+| Strongest compliance posture | Human approval gates + full trace logging |
+| Fastest business adoption | Hybrid model: predictive automation + human decision checkpoints |
 
 ## BTP Services Summary
 
