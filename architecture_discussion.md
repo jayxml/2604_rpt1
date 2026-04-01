@@ -1,35 +1,187 @@
 # Predictive JIT Supply Chain with SAP BTP
 
-> **Session overview**
->
-> | Part | Format | What you will do |
-> |------|--------|------------------|
-> | **Exercise 1A — Hands-On Exercise** | Self-paced | Build predictive delay scoring with SAP-RPT-1 |
-> | **Exercise 1B — Optional Lab** | Self-paced | Evaluate regression and intervention-risk classification approaches |
-> | **Exercise 2 — Hands-On Exercise** | Self-paced | Extend to agentic mitigation with ReAct pattern |
-> | **Part 3 — Architecture Discussion** | Presenter-led | Walk through production architecture patterns for JIT risk management on SAP BTP |
+---
+
+# Part 3: Production Architecture Discussion
+
+**The business problem this architecture solves:** unplanned production downtime caused by supplier delivery failures that weren't anticipated in time to mitigate. The goal is to detect delay risk early enough to act — source alternatively, expedite, or adjust production schedules — before a line-down event occurs. Everything in this architecture exists to support that outcome.
 
 ---
 
-# Part 3: Architecture Discussion (Presenter-Led)
+This use case should be positioned as a clean-core, side-by-side SAP BTP extension.
 
-> **Note for participants:** The sections below are **not hands-on steps**. Your instructor will walk through these topics as a guided discussion. You can follow along and refer back to this document after the session.
+- S/4HANA stays the system of record.
+- SAP BTP hosts prediction, recommendation, workflow, and decision support.
+- HANA Cloud becomes the operational data foundation for production.
+- AI remains advisory until a governed business action is approved.
 
-## Contents
+The architectural discussion is not primarily about packaging notebook logic. It is about defining the right boundary between the digital core and the intelligence sidecar.
 
-| Scenario | Description | Audience |
-|----------|-------------|----------|
-| **A** | From Notebook to Production CAP Application | Developers + Architects |
-| **B** | End-to-End Data Integration from SAP S/4HANA | Integration Specialists |
-| **C** | HANA Cloud as the Prediction Data Store | Data Engineers |
-| **D** | Go-Live Checklist and Operational Excellence | All |
+## 1. Recommended Production Pattern
+
+The recommended enterprise pattern is a **side-by-side SAP BTP extension** where:
+
+- **SAP S/4HANA remains the system of record** for procurement transactions, suppliers, materials, and approved business actions
+- **SAP BTP hosts the intelligence sidecar** for data replication, prediction, agentic recommendation, workflow, and user-facing decision support
+- **CAP is the application boundary**, not the system of record
+- **HANA Cloud becomes the operational data foundation** when persistence, analytics, auditability, and repeatable feature computation are needed
+
+This is a clean-core extension pattern, not an AI feature embedded directly into S/4 custom code.
+
+### 1.1 Core Design Principle
+
+The clean-core stance is:
+
+- Keep **transactional integrity and business ownership** in S/4HANA
+- Keep **prediction logic, recommendation logic, and orchestration** on SAP BTP
+- Replicate only the data needed for prediction and decision support into the extension layer
+- Write back only approved business outcomes, not raw AI internals, unless there is a specific S/4-native reporting requirement that cannot be served from the BTP sidecar, evaluated case by case
+
+### 1.2 Target Solution Architecture
+
+```mermaid
+flowchart LR
+   subgraph S4["SAP S/4HANA Core"]
+      direction TB
+      PO["Purchase Orders\nSupplier / Material / Delivery Data"]
+      PROC["Approved Procurement Actions"]
+   end
+
+   subgraph BTP["SAP BTP Side-by-Side Extension"]
+      direction TB
+
+      subgraph Integration["Integration Layer"]
+         IS["Integration Suite\nBatch + API Mediation"]
+         EM["Event Mesh\nPO / Delivery Events"]
+      end
+
+      subgraph Data["Data Layer"]
+         HC["HANA Cloud\nFeature Store + Audit + Analytics"]
+      end
+
+      subgraph App["Application Layer"]
+         CAP["CAP Service\nRisk APIs + Workflow Integration"]
+      end
+
+      subgraph AI["AI Layer"]
+         RS["Risk Scoring\nSAP-RPT-1 on AI Core"]
+         AG["Mitigation Agent\nGen AI Hub + Tools"]
+      end
+
+      subgraph Experience["Experience Layer"]
+         UI["Fiori / Build Apps\nPlanner Experience"]
+      end
+   end
+
+   PO -->|"Batch sync\n(history, master data)"| IS
+   PO -->|"Events\n(PO created/changed)"| EM
+   IS --> HC
+   EM --> CAP
+   HC --> CAP
+   CAP --> RS
+   CAP --> AG
+   UI --> CAP
+   CAP -->|"Write-back\n(approved actions only)"| PROC
+
+   classDef core fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
+   classDef btp fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
+   classDef layer fill:#ffffff,stroke:#cccccc,color:#333333,stroke-width:1px,stroke-dasharray:3;
+   class PO,PROC core;
+   class IS,EM,HC,CAP,RS,AG,UI btp;
+   class Integration,Data,App,AI,Experience layer;
+```
+
+**Reading the diagram:** S/4HANA data flows into BTP via two paths — batch synchronization through Integration Suite for historical context and master data, and event-driven updates through Event Mesh for real-time PO triggers. The write-back path (CAP → Approved Procurement Actions) is the clean-core boundary: only approved business outcomes cross back into S/4.
+
+### 1.3 What Lives Where
+
+| Concern | System of Record |
+|---------|------------------|
+| Purchase orders, supplier master, material master, confirmations | SAP S/4HANA |
+| Replicated historical context for scoring | HANA Cloud sidecar |
+| Risk predictions and confidence | BTP sidecar |
+| Agent recommendations and reasoning trace | BTP sidecar |
+| Approval workflow state | BTP workflow/CAP, optionally mirrored to S/4 via business status |
+| Final approved sourcing or procurement action | SAP S/4HANA |
+
+### 1.4 What CAP Does in This Architecture
+
+CAP is described as the "application boundary" and "orchestration and governance boundary." In practice, this means:
+
+- **Owns the sidecar domain model**: entities such as `RiskAssessments`, `MitigationProposals`, and `ApprovalDecisions` are defined in CDS and persisted to HANA Cloud
+- **Exposes APIs for the UI**: the Fiori or Build Apps front end consumes OData or REST services served by CAP
+- **Orchestrates AI calls**: CAP handlers invoke AI Core for prediction and Gen AI Hub for agent recommendations, then normalize and persist the results
+- **Enforces governance**: authorization checks, input validation, and write-back eligibility rules live in the CAP service layer
+- **Mediates write-back to S/4**: only after an approval event does CAP trigger the integration flow that updates the ERP process
+
+CAP is not a pass-through proxy. It is the application layer that owns the risk domain on BTP, persists to HANA Cloud, and controls what is allowed to flow back into S/4HANA.
+
+### Discussion Question 1
+
+**If your organization prefers to keep everything in S/4, what are the trade-offs?**
+
+The clean-core position: keep AI outputs in the sidecar, and write back only approved business outcomes or lightweight business references into S/4HANA. Raw predictions, confidence scores, and agent reasoning traces are advisory artifacts — they change frequently, require richer audit storage, and don't belong in ERP tables unless there's a strict reporting requirement that can't be served from BTP.
+
+### 1.5 Write-Back: Recommended Position
+
+This is the key clean-core design decision in the target architecture.
+
+**Recommended default:**
+
+- Keep **predictions, confidence, explanations, and agent proposals outside S/4HANA** in the CAP application and BTP persistence layer
+- Write back to S/4HANA only when a **business action has been approved** and must affect the ERP process
+
+**Why this is usually the right design:**
+
+- Raw predictions are advisory artifacts, not authoritative ERP transactions
+- Keeping AI artifacts in the sidecar protects S/4 clean-core integrity
+- The sidecar needs richer audit, trace, and experimentation storage than most ERP tables should carry
+- Model versions and agent traces change more frequently than ERP process design
+
+**Valid write-back patterns:**
+
+| Pattern | When to use it | Recommended? |
+|---------|----------------|--------------|
+| No write-back; planner works in sidecar UI | Advisory use case, early rollout, low process coupling | Yes, for pilots |
+| Write back a status/note/reference ID to S/4 | Business wants ERP visibility of an external assessment | Often useful |
+| Write back approved change request or follow-up task | Human approved a sourcing mitigation that must be executed in ERP | Yes |
+| Write back raw score, confidence, and full reasoning trace into S/4 tables | Only if there is a strict ERP reporting requirement | Usually no |
+
+### 1.6 When HANA Cloud Is Optional vs Required
+
+HANA Cloud should not be described as generically optional. It is optional only for a narrow architecture shape.
+
+| Situation | HANA Cloud Optional? | Reason |
+|-----------|----------------------|--------|
+| Single-PO scoring with direct read-through to S/4 and minimal persistence | Yes | CAP can call S/4 APIs and AI Core directly |
+| Short-lived demo or workshop with CSV/object storage | Yes | Lightweight prototype mode |
+| Need historical context assembly across vendors, materials, and delivery outcomes | No, effectively required | Feature computation and repeatable scoring need a persisted sidecar |
+| Need prediction audit trail, recommendation history, analytics, or monitoring | No, effectively required | Operational governance requires structured persistence |
+| Need event-driven scaling and decoupled reporting from S/4 | No, effectively required | Sidecar data store avoids overloading transactional APIs |
+
+**Lightweight path (no HANA Cloud):**
+
+```mermaid
+flowchart LR
+   S4["S/4HANA"] -->|"OData read"| CAP["CAP Service"]
+   CAP -->|"Feature payload"| AI["AI Core\nSAP-RPT-1"]
+   AI -->|"Prediction"| CAP
+   CAP -->|"Result"| UI["UI"]
+
+   classDef core fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
+   classDef app fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
+   class S4 core;
+   class CAP,AI,UI app;
+```
+
+In this path, CAP calls S/4 directly for each scoring request, assembles the feature payload, invokes SAP-RPT-1, and returns the result. There is no persistent sidecar — no audit trail, no historical feature store, no feedback loop for accuracy measurement. This works for a demo or narrow pilot but does not scale to production.
+
+For this JIT risk use case, once the solution moves beyond a demo into production, **HANA Cloud is the recommended default**, not merely an optional add-on.
 
 ---
 
 
-## Architecture Decision Guide: Rule, Predict, Agent, or Embedded AI
-
-This workshop separates architecture choices that are often mixed together in enterprise programs, so solution architects can design by intent rather than by tooling preference.
+## 2. Architecture Decision Guide
 
 | Decision Question | Recommended Pattern | Why |
 |------------------|---------------------|-----|
@@ -38,7 +190,7 @@ This workshop separates architecture choices that are often mixed together in en
 | Is adaptive multi-step reasoning needed across tools? | Agentic orchestration with guardrails | Adds value only when workflow is ambiguous |
 | Is capability already available in SAP embedded AI/Joule for the same process? | Adopt embedded capability first | Faster time-to-value and lower operational burden |
 
-### Recommended Decision Sequence for Architects and Developers
+### Recommended Decision Sequence
 
 1. Start with deterministic process policy.
 2. Add `sap-rpt-1` where predictive signal improves outcomes.
@@ -47,30 +199,15 @@ This workshop separates architecture choices that are often mixed together in en
 
 > Principle: do not optimize for maximum AI sophistication. Optimize for minimum architecture that reliably delivers business value with clear governance.
 
-## Human Adoption as an Architecture Constraint
+### Discussion Question 2
 
-In enterprise AI programs, the binding constraint is often not deployment complexity but trust. A BTP workshop can teach a developer how to deploy `sap-rpt-1` on AI Core, but it does not by itself persuade a planner, buyer, or procurement manager to rely on a prediction over established operating judgment.
+**If prediction already works, what problem is the agent actually solving?**
 
-This does not make the challenge non-technical. It means the architecture must be designed to reduce perceived risk, preserve accountability, and make AI-assisted decisions inspectable.
+Architectural guidance: start with prediction plus deterministic policy and workflow. Add an agent only where mitigation requires multi-step reasoning across tools, constraints, and trade-offs.
 
-### What users are actually evaluating
+*Example:* The prediction flags a high-risk PO for a critical material. A deterministic rule could trigger a notification, but choosing the right mitigation requires evaluating alternative suppliers against current inventory positions, contractual lead times, quality certifications, landed cost thresholds, and production schedule constraints — simultaneously. That's the kind of multi-variable, trade-off-weighted decision where an agent adds value over static rules.
 
-- Is this recommendation understandable enough to act on?
-- If the prediction is wrong, who is accountable?
-- Can I override it without losing control of the process?
-- Has this system earned trust through visible outcomes over time?
-
-### Architecture implications for SAP BTP solutions
-
-- Keep AI outputs advisory before they become operationally binding
-- Show evidence, not just a score: confidence, relevant historical patterns, and policy rationale
-- Preserve decision rights with workflow-based approval for sourcing-impacting actions
-- Log predictions, context, and outcomes so the business can inspect and challenge the system
-- Roll out in phases so users calibrate trust through pilot results rather than executive mandate
-
-> Design principle: if the business experiences the solution as a black box, adoption will stall even when model accuracy is acceptable. Trust must be designed into the architecture, workflow, and user experience.
-
-### Trust Chain for BTP AI Adoption
+### Trust Chain for Adoption
 
 ```mermaid
 flowchart TD
@@ -94,355 +231,114 @@ flowchart TD
    class D,E,F action;
 ```
 
-The model contributes predictive signal, but business trust is created by the full chain around it.
+The model contributes predictive signal, but trust comes from evidence, approval, and auditability.
 
 ---
 
-## Scenario A: From Notebook to Production CAP Application
+## 3. Application Architecture on SAP BTP
 
-### Use Case A: Production-Grade JIT Risk Dashboard
+### 3.1 Target User Experience
 
-**Business situation:** The supply chain team needs a governed, always-on system that continuously scores incoming POs for delay risk. They cannot rely on ad-hoc notebook execution or manual monitoring.
+In production, the solution becomes a planner-facing application that does three things well:
 
-**Why this use case matters:**
-- Production line efficiency depends on proactive risk detection
-- Business users need a simple dashboard, not Python notebooks
-- Audit trail and approval workflows are required for compliance
+- surfaces current PO risk in a business-friendly way
+- shows enough evidence for a human to trust or challenge the recommendation
+- routes mitigation decisions through explicit approval rather than hidden automation
 
-**What the end users need:**
-- A Fiori-style application showing current PO risk status
-- Visible decision evidence such as confidence, key risk drivers, and comparable historical cases
-- Automatic alerts when Red-tier risks are detected
-- One-click access to mitigation proposals
-- Approval workflow before sourcing changes are executed
+The application becomes the operational surface where prediction, explanation, recommendation, and approval come together.
 
-In trust-sensitive processes, this dashboard is not just a monitoring surface. It is the user-facing implementation of the Evidence Layer: the place where the business can inspect why the system is recommending action before deciding whether to approve it.
+### 3.2 Planner Journey
 
-### Notebook → Production: What Changes?
-
-| Concern | Notebook (Today) | Production (Target) |
-|---------|------------------|---------------------|
-| **User interface** | Code cells | Fiori / SAP Build Apps |
-| **Authentication** | `.env` file | XSUAA + service bindings |
-| **Data freshness** | Static CSV files | Live S/4HANA integration |
-| **Model inference** | Manual trigger | Event-driven or scheduled |
-| **Observability** | Print statements | Structured logging + dashboards |
-| **Approval workflow** | Console input | BTP Workflow / Build Process Automation |
-| **Error handling** | Exceptions | Retry policies, dead-letter queues |
-| **Scalability** | Single user | Multi-tenant CAP deployment |
-
-> **Important:**
-> The code snippets in this scenario are **illustrative only**. They demonstrate patterns, not runnable implementations.
-
-### A.1 Target Solution Architecture (High Level)
+The following sequence illustrates the end-to-end planner experience in the target application:
 
 ```mermaid
-flowchart TD
-   subgraph PL["Presentation Layer"]
-      UI["SAP Fiori / SAP Build Apps"]
-   end
+sequenceDiagram
+   participant P as Supply Chain Planner
+   participant UI as Fiori / Build Apps
+   participant CAP as CAP Service
+   participant HC as HANA Cloud
+   participant AI as AI Core (SAP-RPT-1)
+   participant AG as Gen AI Hub (Agent)
+   participant S4 as S/4HANA
 
-   subgraph AL["Application Layer"]
-      CAP["CAP Service<br/>Node.js / Java"]
-      AR["/assess-risk"]
-      GM["/get-mitigation"]
-      AP["/approve"]
-      RS["Risk Scoring Engine"]
-      AO["Agent Orchestrator<br/>LLM + Tools"]
+   P->>UI: Open risk dashboard
+   UI->>CAP: GET /RiskAssessments?$filter=tier eq 'Red'
+   CAP->>HC: Query scored POs with context
+   HC-->>CAP: Risk list with scores and drivers
+   CAP-->>UI: Ranked risk list
+   UI-->>P: Display POs by risk tier
 
-      CAP --> AR
-      CAP --> GM
-      CAP --> AP
-      AR --> RS
-      GM --> AO
-      AP --> AO
-   end
+   P->>UI: Drill into high-risk PO
+   UI->>CAP: GET /RiskAssessments({id})?$expand=recommendations
+   CAP->>AI: Score PO (if refresh needed)
+   AI-->>CAP: Prediction + confidence + drivers
+   CAP->>AG: Request mitigation options (if Red + critical)
+   AG-->>CAP: Ranked alternative suppliers with reasoning
+   CAP->>HC: Persist assessment and recommendation
+   CAP-->>UI: Risk detail + evidence + recommendation
+   UI-->>P: Show recommendation with evidence
 
-   subgraph AI["SAP AI Services"]
-      AIC["AI Core · SAP-RPT-1<br/>Gen AI Hub · Claude"]
-   end
-
-   subgraph DI["Data & Integration Layer"]
-      DATA["S/4HANA APIs<br/>Integration Suite<br/>HANA Cloud (optional)"]
-   end
-
-   subgraph PS["Platform & Security Layer"]
-      SEC["XSUAA · Destinations<br/>Service Bindings"]
-   end
-
-   UI --> CAP
-   RS --> AIC
-   AO --> AIC
-   CAP --> DATA
-   CAP --> SEC
-
-   classDef layer fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
-   classDef app fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
-   classDef service fill:#edf6ed,stroke:#4d7a4d,color:#183218,stroke-width:1px;
-
-   class UI,CAP,AR,GM,AP,RS,AO app;
-   class AIC,DATA,SEC service;
+   P->>UI: Approve mitigation action
+   UI->>CAP: POST /ApprovalDecisions
+   CAP->>S4: Create follow-up (source list change / new PO)
+   S4-->>CAP: Confirmation
+   CAP->>HC: Log approval and outcome
+   CAP-->>UI: Action confirmed
+   UI-->>P: Confirmation with audit reference
 ```
 
-**SAP BTP value mapping:**
-- **CAP** gives standard service APIs, security integration, and extension-ready app model
-- **AI Core** provides managed AI runtime with SAP-RPT-1 and LLM access
-- **Gen AI Hub SDK** enables consistent orchestration patterns
-- **Integration Suite** connects to live ERP data
+### 3.3 Recommended BTP Components
 
-### A.2 Recommended Build Steps (CAP Productization)
+| Capability | Recommended BTP Building Block |
+|------------|--------------------------------|
+| Business UI | SAP Fiori elements or SAP Build Apps |
+| Application/API layer | CAP |
+| Predictive inference | SAP AI Core with `sap-rpt-1` |
+| Agentic recommendation | Gen AI Hub orchestration |
+| Identity and authorization | XSUAA |
+| Workflow and approval | SAP Build Process Automation or workflow service |
 
-1. **Create CAP service APIs:**
-   - `POST /api/assess-po-risk` - Score a single PO
-   - `POST /api/batch-assess` - Score multiple POs
-   - `GET /api/risk-dashboard` - Current risk status
-   - `POST /api/generate-mitigation` - Create proposal
-   - `POST /api/approve-mitigation` - Approval endpoint
+### 3.4 Workflow: BPA vs. CAP-Native Logic
 
-2. **Implement a risk scoring service:**
-   - Wrap SAP-RPT-1 inference calls
-   - Cache historical context for efficiency
-   - Return standardized risk tier + confidence
+| Consideration | SAP Build Process Automation | CAP-native workflow logic |
+|---------------|------------------------------|--------------------------|
+| Multi-step approval with escalation | Preferred — visual workflow designer, task inbox, SLA tracking | Possible but requires custom implementation |
+| Audit trail and compliance | Built-in process logs and decision history | Must be implemented manually |
+| Early pilot with single approver | Heavier than needed | Simpler and faster to build |
+| Integration with SAP Task Center | Native | Requires additional configuration |
 
-3. **Add governance controls:**
-   - Persist all predictions with timestamps
-   - Log agent reasoning traces
-   - Require approval for sourcing changes
+**Recommended default:** use SAP Build Process Automation for any approval flow that involves multiple steps, role-based routing, or compliance requirements. Use lightweight CAP-native logic only for simple single-approver flows in early pilots where speed of implementation is the priority.
 
-4. **Add enterprise security:**
-   - XSUAA scopes for viewer vs approver personas
-   - Secure secrets via service bindings
-   - Audit log all decisions
+### 3.5 Application Design Principles
 
-5. **Add operational quality:**
-   - Structured logs to SAP Cloud Logging
-   - Alert on high-risk PO spikes
-   - Dashboard for model accuracy metrics
-
-### A.3 CAP Sample Code (Illustrative)
-
-```javascript
-// srv/risk-service.js (illustrative only)
-const cds = require('@sap/cds');
-
-module.exports = cds.service.impl(async function () {
-  
-  this.on('assessPORisk', async (req) => {
-    const { poId } = req.data;
-    
-    // Fetch PO details from S/4HANA
-    const poDetails = await fetchPOFromS4(poId);
-    
-    // Get historical context
-    const historicalContext = await getHistoricalPOContext(poDetails.vendorId);
-    
-    // Call SAP-RPT-1 for prediction
-    const prediction = await callRPT1Model(poDetails, historicalContext);
-    
-    // Apply business policy
-    const riskTier = deriveRiskTier(prediction.delayDays);
-    
-    // Persist for audit
-    await persistPrediction(poId, prediction, riskTier);
-    
-    return {
-      poId,
-      predictedDelay: prediction.delayDays,
-      riskTier,
-      recommendation: getRiskRecommendation(riskTier, poDetails.isCritical)
-    };
-  });
-
-  this.on('generateMitigation', async (req) => {
-    const { poId, riskAssessment } = req.data;
-    
-    // Only for high-risk scenarios
-    if (riskAssessment.riskTier !== 'Red') {
-      return { status: 'NOT_REQUIRED' };
-    }
-    
-    // Run agent for mitigation proposal
-    const agentResult = await runMitigationAgent(poId, riskAssessment);
-    
-    // Persist proposal
-    const proposalId = await persistProposal(agentResult);
-    
-    return {
-      proposalId,
-      status: 'PENDING_APPROVAL',
-      recommendation: agentResult.recommendation,
-      alternativeVendor: agentResult.suggestedVendor
-    };
-  });
-});
-```
-
-### A.4 AI Service Integration Layer
-
-```javascript
-// srv/lib/ai-service.js (illustrative only)
-const { OrchestrationService } = require('gen_ai_hub.orchestration');
-
-async function callRPT1Model(poDetails, historicalContext) {
-  // Format data for SAP-RPT-1
-  const payload = formatForRPT1(poDetails, historicalContext);
-  
-  // Call AI Core deployment
-  const response = await aiCoreClient.predict(
-    process.env.RPT1_DEPLOYMENT_URL,
-    { input: payload }
-  );
-  
-  return {
-    delayDays: response.prediction,
-    confidence: response.confidence
-  };
-}
-
-async function runMitigationAgent(poId, riskAssessment) {
-  const orchestration = new OrchestrationService({
-    apiUrl: process.env.ORCH_DEPLOYMENT_URL
-  });
-  
-  // Agent with tools for supplier lookup, capacity check, etc.
-  const result = await orchestration.run({
-    template: agentTemplate,
-    llm: { name: 'anthropic--claude-4.5-sonnet' },
-    context: { poId, riskAssessment }
-  });
-  
-  return parseAgentResult(result);
-}
-```
-
-### A.5 Deployment Steps (CAP + AI Services)
-
-1. **Provision or bind services:**
-   - SAP AI Core (for RPT-1 and LLM access)
-   - XSUAA (authentication)
-   - Destination Service (for S/4HANA connectivity)
-   - SAP HANA Cloud (optional, for persistence)
-
-2. **Configure environment:**
-   - Bind service keys
-   - Set deployment URLs for AI models
-   - Configure destination to S/4HANA
-
-3. **Build and deploy:**
-   ```bash
-   # Build MTA archive
-   mbt build
-   
-   # Deploy to Cloud Foundry
-   cf deploy mta_archives/jit-risk-app.mtar
-   ```
-
-4. **Post-deployment verification:**
-   - Health endpoint check
-   - Test single PO risk assessment
-   - Verify agent produces valid proposals
-   - Confirm approval workflow triggers
+- Keep the CAP service as the orchestration and governance boundary
+- Separate prediction from recommendation so each can be governed independently
+- Present evidence with every high-risk recommendation
+- Require human approval for any sourcing-impacting step
+- Design for advisory-first rollout, even if later phases add deeper automation
 
 ---
 
-## Scenario B: End-to-End Data Integration from SAP S/4HANA
+## 4. Integration and Data Architecture
 
-### Use Case B: Live ERP Data for Accurate Predictions
+### 4.1 Recommended Integration Pattern
 
-**Business situation:** The workshop used static CSV files exported from S/4HANA. In production, predictions must use current data—vendor performance changes, new POs arrive continuously, and historical patterns evolve.
+The solution needs a governed data flow from S/4HANA into the sidecar so that predictions reflect current operational reality rather than exported snapshots. The cleanest production pattern is a hybrid model:
 
-**Why this use case matters:**
-- Stale data leads to inaccurate predictions
-- Manual data exports don't scale
-- Enterprise teams need governed integration
+- use **batch synchronization** for historical context, supplier performance history, and slower-changing reference data
+- use **event-driven updates** for new purchase orders, confirmations, and operational triggers that require near real-time scoring
 
-**What the business needs:**
-- Automatic data pipeline from S/4HANA to prediction service
-- Near real-time updates for critical attributes
-- Clear data freshness SLAs
+This avoids overloading S/4 with repeated read-through queries while still allowing timely decisions on newly created or updated POs.
 
-### B.1 Data Sources in S/4HANA
-
-| Data Element | S/4HANA Source | Update Frequency |
-|--------------|----------------|------------------|
-| Purchase Orders | EKKO/EKPO (OData: `A_PurchaseOrder`) | Real-time |
-| Vendor Master | LFA1 (OData: `A_Supplier`) | Daily |
-| Material Master | MARA (OData: `A_Product`) | Weekly |
-| Delivery History | LIKP/LIPS (OData: `A_InbDeliveryHeader`) | Real-time |
-| Quality Notifications | QMEL (OData: `A_DefectRecord`) | Daily |
-
-### B.2 Integration Patterns
-
-**Pattern 1: Scheduled Batch Synchronization**
-- Best for: Historical context, vendor profiles, material master
-- Frequency: Daily or weekly
-- Implementation: Integration Suite iFlow → HANA Cloud or Object Store
-
-```text
-S/4HANA (OData)
-   │ (scheduled extraction)
-   v
-Integration Suite iFlow
-   │ (transform + validate)
-   v
-HANA Cloud / Object Store
-   │
-   v
-Prediction Service reads from cache
-```
-
-**Pattern 2: Event-Driven Real-Time Updates**
-- Best for: New PO creation, delivery confirmations
-- Frequency: Near real-time (seconds to minutes)
-- Implementation: S/4HANA Business Events → Event Mesh → CAP Service
-
-```text
-S/4HANA
-   │ (Business Event: PO Created)
-   v
-SAP Event Mesh
-   │ (pub/sub)
-   v
-CAP Service Event Handler
-   │ (trigger risk assessment)
-   v
-Risk Dashboard Updated
-```
-
-### B.3 Integration Flow Example (Illustrative)
-
-```groovy
-// Integration Suite iFlow script (illustrative only)
-// Extracts vendor performance metrics from S/4HANA
-
-def message = bodyAs(String.class)
-def vendors = parseVendorData(message)
-
-vendors.each { vendor ->
-    // Calculate OTIF from delivery history
-    def deliveries = getDeliveryHistory(vendor.vendorId)
-    def otifPercent = calculateOTIF(deliveries)
-    def avgDelay = calculateAvgDelay(deliveries)
-    
-    vendor.otifPercent = otifPercent
-    vendor.avgPastDelay = avgDelay
-    vendor.lastUpdated = now()
-}
-
-// Output to HANA Cloud or Object Store
-message.setBody(toJSON(vendors))
-message.setHeader('targetTable', 'VENDOR_PERFORMANCE')
-return message
-```
-
-### B.4 Event-Driven Scoring Architecture
+### 4.2 Event-Driven Scoring Architecture
 
 ```mermaid
 flowchart LR
    S4["S/4HANA<br/>PO Created"] --> EM["SAP Event Mesh<br/>Topic"]
    EM --> CAP["CAP Service<br/>Event Handler"]
    CAP --> RS["Risk Scoring<br/>SAP-RPT-1"]
-   RS --> AG["If Red + Critical<br/>Agent Flow"]
+   RS --> HC["HANA Cloud<br/>Persist Score + Audit"]
+   HC --> AG["If Red + Critical<br/>Agent Flow"]
    AG --> NT["Notification<br/>to SC Manager"]
 
    classDef source fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
@@ -450,11 +346,19 @@ flowchart LR
    classDef action fill:#edf6ed,stroke:#4d7a4d,color:#183218,stroke-width:1px;
 
    class S4,EM source;
-   class CAP,RS app;
+   class CAP,RS,HC app;
    class AG,NT action;
 ```
 
-### B.5 Trade-offs Discussion
+Every prediction is persisted to HANA Cloud before downstream processing. This ensures auditability regardless of whether the agent flow triggers.
+
+### Discussion Question 3
+
+**When is direct read-through from S/4 good enough, and when does it become the wrong design?**
+
+Architectural guidance: direct read-through can work for a narrow pilot, but production-grade prediction, audit, analytics, and repeatable context assembly typically require HANA Cloud as the sidecar persistence layer.
+
+### 4.3 Trade-offs Discussion
 
 | Decision | Option A | Option B | Recommendation |
 |----------|----------|----------|----------------|
@@ -463,230 +367,85 @@ flowchart LR
 | **Context storage** | In-memory | HANA Cloud | HANA Cloud for persistence + analytics |
 | **Scoring trigger** | Scheduled batch | On PO creation | Event-driven for critical; Batch for bulk |
 
----
+**Why Integration Suite over direct OData for production:** Direct OData calls from CAP to S/4HANA work for a pilot, but Integration Suite adds API throttling and rate limiting to protect S/4 transactional performance, centralized credential and certificate management, transformation and mapping when the S/4 API shape does not match the sidecar model, and monitoring and alerting on integration failures. For a production side-by-side extension, these concerns outweigh the simplicity of direct calls.
 
-## Scenario C: HANA Cloud as the Prediction Data Store
+### 4.4 HANA Cloud Decision
 
-### Use Case C: Scalable Context Management
+> This section consolidates the HANA Cloud guidance introduced in Section 1.6 and referenced in Discussion Question 3. The position is intentionally repeated because under-investing in sidecar persistence is the most common architectural gap in these solutions.
 
-**Business situation:** SAP-RPT-1 performs better with rich historical context. As PO volume grows, managing context efficiently becomes critical.
+For this use case, HANA Cloud becomes the recommended default once the solution needs any combination of:
 
-**Why HANA Cloud:**
-- Native integration with BTP services
-- Vector capabilities for future ML enhancements
-- Enterprise-grade performance and security
-- Single source of truth for analytics + ML
+- historical feature assembly across suppliers, materials, and delivery outcomes
+- auditability of predictions and recommendations
+- operational analytics and monitoring
+- decoupled scaling from transactional S/4 APIs
 
-### C.1 Data Model for Prediction Context
+If the goal is only a narrow pilot for single-PO scoring, a lighter design may be acceptable. For a production side-by-side extension, HANA Cloud is usually the correct architectural choice.
 
-```sql
--- Historical PO Performance (for SAP-RPT-1 context)
-CREATE TABLE PO_HISTORY (
-    PO_ID NVARCHAR(20) PRIMARY KEY,
-    VENDOR_ID NVARCHAR(10),
-    MATERIAL_ID NVARCHAR(18),
-    ORDER_QUANTITY INTEGER,
-    ORDER_DATE DATE,
-    PLANNED_DELIVERY_DATE DATE,
-    ACTUAL_DELIVERY_DATE DATE,
-    ACTUAL_DELAY_DAYS DECIMAL(5,1),
-    CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+### 4.5 Prediction Feedback Loop
 
--- Vendor Performance Metrics (derived)
-CREATE TABLE VENDOR_PERFORMANCE (
-    VENDOR_ID NVARCHAR(10) PRIMARY KEY,
-    VENDOR_COUNTRY NVARCHAR(50),
-    OTIF_PERCENT DECIMAL(5,2),
-    AVG_DELAY_DAYS DECIMAL(5,2),
-    TOTAL_POS INTEGER,
-    LAST_UPDATED TIMESTAMP
-);
+The architecture must close the loop between predictions and actual outcomes. Without this, model quality silently degrades over time as supplier behavior, lead times, and procurement patterns shift.
 
--- Risk Predictions (audit trail)
-CREATE TABLE RISK_PREDICTIONS (
-    PREDICTION_ID NVARCHAR(36) PRIMARY KEY,
-    PO_ID NVARCHAR(20),
-    PREDICTED_DELAY DECIMAL(5,1),
-    RISK_TIER NVARCHAR(10),
-    CONFIDENCE DECIMAL(3,2),
-    MODEL_VERSION NVARCHAR(20),
-    PREDICTED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+**How actuals flow back:**
 
--- Mitigation Proposals
-CREATE TABLE MITIGATION_PROPOSALS (
-    PROPOSAL_ID NVARCHAR(36) PRIMARY KEY,
-    PO_ID NVARCHAR(20),
-    CURRENT_VENDOR NVARCHAR(10),
-    RECOMMENDED_VENDOR NVARCHAR(10),
-    STATUS NVARCHAR(20), -- PENDING, APPROVED, REJECTED
-    JUSTIFICATION NCLOB,
-    CREATED_AT TIMESTAMP,
-    DECIDED_AT TIMESTAMP,
-    DECIDED_BY NVARCHAR(100)
-);
+- A scheduled batch job reconciles predicted delivery dates against actual goods receipt (GR) postings in S/4HANA
+- The reconciliation result — predicted delay vs. actual delay — is written to HANA Cloud alongside the original prediction record
+- This creates a paired dataset (prediction + outcome) that supports accuracy monitoring and retraining
+
+**What this enables:**
+
+- Continuous measurement of prediction accuracy (the basis for the >80% target in Section 5.2)
+- Detection of model drift — when accuracy drops below threshold, the operations team is alerted
+- Retraining dataset assembly — outcome-labeled records are available for periodic SAP-RPT-1 retraining or recalibration
+- Override analysis — comparing overridden predictions to actual outcomes reveals whether human judgment improved or degraded decision quality
+
+```mermaid
+flowchart LR
+   S4["S/4HANA<br/>Goods Receipt Posting"] --> IS["Integration Suite<br/>Batch Sync"]
+   IS --> HC["HANA Cloud<br/>Outcome Records"]
+   HC --> REC["Reconciliation Job<br/>Predicted vs Actual"]
+   REC --> MON["Accuracy Monitoring<br/>Drift Detection"]
+   REC --> RT["Retraining Dataset<br/>for SAP-RPT-1"]
+
+   classDef source fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
+   classDef app fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
+   classDef feedback fill:#f3efe6,stroke:#7a5c2e,color:#2b2113,stroke-width:1px;
+
+   class S4,IS source;
+   class HC,REC app;
+   class MON,RT feedback;
 ```
 
-### C.2 Context Query for SAP-RPT-1
-
-```sql
--- Get historical context for a prediction
-SELECT 
-    PO_ID,
-    VENDOR_ID,
-    VP.VENDOR_COUNTRY,
-    VP.OTIF_PERCENT AS VENDOR_OTIF_PERCENT,
-    VP.AVG_DELAY_DAYS AS VENDOR_AVG_PAST_DELAY,
-    MATERIAL_ID,
-    ORDER_QUANTITY,
-    EXTRACT(MONTH FROM ORDER_DATE) AS ORDER_MONTH,
-    ACTUAL_DELAY_DAYS
-FROM PO_HISTORY PH
-JOIN VENDOR_PERFORMANCE VP ON PH.VENDOR_ID = VP.VENDOR_ID
-WHERE PH.VENDOR_ID = :targetVendor
-   OR PH.MATERIAL_ID = :targetMaterial
-ORDER BY ORDER_DATE DESC
-LIMIT 200;
-```
-
-### C.3 Analytics Dashboard Queries
-
-```sql
--- Weekly risk distribution
-SELECT 
-    RISK_TIER,
-    COUNT(*) AS PO_COUNT,
-    AVG(PREDICTED_DELAY) AS AVG_PREDICTED_DELAY
-FROM RISK_PREDICTIONS
-WHERE PREDICTED_AT >= ADD_DAYS(CURRENT_DATE, -7)
-GROUP BY RISK_TIER;
-
--- Vendor risk ranking
-SELECT 
-    VENDOR_ID,
-    COUNT(CASE WHEN RISK_TIER = 'Red' THEN 1 END) AS RED_COUNT,
-    COUNT(CASE WHEN RISK_TIER = 'Amber' THEN 1 END) AS AMBER_COUNT,
-    COUNT(*) AS TOTAL_POS
-FROM RISK_PREDICTIONS RP
-JOIN PO_HISTORY PH ON RP.PO_ID = PH.PO_ID
-WHERE RP.PREDICTED_AT >= ADD_DAYS(CURRENT_DATE, -30)
-GROUP BY VENDOR_ID
-ORDER BY RED_COUNT DESC;
-
--- Mitigation effectiveness
-SELECT 
-    MP.RECOMMENDED_VENDOR,
-    COUNT(*) AS PROPOSALS,
-    SUM(CASE WHEN MP.STATUS = 'APPROVED' THEN 1 ELSE 0 END) AS APPROVED,
-    AVG(CASE WHEN MP.STATUS = 'APPROVED' 
-        THEN DATEDIFF(DAY, PH.PLANNED_DELIVERY_DATE, PH.ACTUAL_DELIVERY_DATE)
-        END) AS AVG_ACTUAL_DELAY_AFTER_SWITCH
-FROM MITIGATION_PROPOSALS MP
-JOIN PO_HISTORY PH ON MP.PO_ID = PH.PO_ID
-GROUP BY MP.RECOMMENDED_VENDOR;
-```
+Without this feedback loop, the system can generate predictions indefinitely but has no mechanism to know whether they are still accurate. This is one of the first capabilities to build once the solution moves beyond a pilot.
 
 ---
 
-## Scenario D: Go-Live Checklist and Operational Excellence
+## 5. Operating Model
 
-### D.1 Security Checklist
+### 5.1 Operational Priorities
 
-| Area | Requirement | BTP Implementation |
-|------|-------------|-------------------|
-| **API Authentication** | Only authorized callers | XSUAA + OAuth2 |
-| **Credential Storage** | No secrets in code | BTP Credential Store |
-| **Data Privacy** | PII handling compliance | Data masking, audit logs |
-| **Network Isolation** | Restrict external access | Private Link, Cloud Connector |
-| **Role-Based Access** | Separate viewer/approver | XSUAA scopes and roles |
+Production readiness depends less on code volume and more on governance discipline:
 
-### D.2 Observability Checklist
+- secure access to S/4, BTP services, and approval roles
+- persistent audit of predictions, overrides, and approved actions
+- observability for latency, failures, and model quality over time
+- a controlled rollout that proves trust before scaling automation
 
-| Concern | Implementation |
-|---------|---------------|
-| **Structured Logging** | JSON logs to SAP Cloud Logging |
-| **Prediction Audit** | Persist every prediction with context |
-| **Agent Traces** | Store full reasoning trace |
-| **Latency Monitoring** | Track model inference times |
-| **Alerting** | SAP Alert Notification for anomalies |
+### 5.2 Success Metrics
 
-### D.3 Model Operations (MLOps)
+| Metric | Target | Measurement | Measured By |
+|--------|--------|-------------|-------------|
+| **Prediction Accuracy** | >80% of scored POs have predicted delivery within ±1 day of actual | (Predictions within ±1 day) / (Total scored POs with known outcomes) | HANA Cloud reconciliation job (Section 4.5) |
+| **Risk Detection Rate** | >90% Red-tier caught | True positives / actual delays | HANA Cloud reconciliation job |
+| **Mitigation Adoption** | >60% proposals approved | Approved / Generated | CAP audit log + Workflow/BPA |
+| **Recommendation Override Rate** | Track by persona and supplier segment | Overrides / total recommendations | CAP audit log |
+| **Override Reason Coverage** | >90% overrides coded with reason | Overrides with reason / all overrides | CAP audit log |
+| **Time to Detection** | <4 hours from PO creation | Event timestamp to alert | Event Mesh + CAP event handler SLA |
+| **Line-Down Avoidance** | Track avoided incidents | Mitigated POs that would have delayed | HANA Cloud analytics + S/4 production data |
 
-| Aspect | Approach |
-|--------|----------|
-| **Model Versioning** | Track SAP-RPT-1 deployment versions |
-| **Accuracy Monitoring** | Compare predictions to actual outcomes |
-| **Drift Detection** | Alert when vendor performance patterns change |
-| **Retraining Trigger** | When accuracy drops below threshold |
-| **A/B Testing** | Compare model versions before promotion |
+**Note on Line-Down Avoidance:** This metric requires a counterfactual — "would this PO have caused a line-down if not mitigated?" — which cannot be directly measured. In practice, this is estimated by comparing mitigated high-risk POs against historical line-down rates for similar unmitigated cases, or by tracking near-miss incidents where mitigation was confirmed to prevent disruption. Treat this as a lagging indicator that requires operational judgment, not a precise KPI.
 
-### D.4 Recommended Go-Live Sequence
-
-```text
-Week 1:  Deploy CAP application with mock predictions
-          Configure XSUAA, test authentication
-          
-Week 2:  Connect to SAP AI Core (SAP-RPT-1)
-          Run parallel: live predictions vs historical outcomes
-          
-Week 3:  Add S/4HANA integration (read-only)
-          Validate data freshness SLAs
-          
-Week 4:  Enable agent for mitigation proposals
-          Configure human-in-the-loop workflow
-          
-Week 5:  Production pilot with limited PO subset
-          Monitor accuracy and latency
-          
-Week 6:  Full rollout with all POs
-          Enable automated alerting
-          Stakeholder training
-```
-
-### D.5 Success Metrics
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| **Prediction Accuracy** | >80% within ±1 day | Compare predictions to actuals |
-| **Risk Detection Rate** | >90% Red-tier caught | True positives / actual delays |
-| **Mitigation Adoption** | >60% proposals approved | Approved / Generated |
-| **Recommendation Override Rate** | Track by persona and supplier segment | Overrides / total recommendations |
-| **Override Reason Coverage** | >90% overrides coded with reason | Overrides with reason / all overrides |
-| **Time to Detection** | <4 hours from PO creation | Event timestamp to alert |
-| **Line-Down Avoidance** | Track avoided incidents | Mitigated POs that would have delayed |
-
----
-
-
-## 90-Day Adoption Blueprint (Pilot to Productive Rollout)
-
-This blueprint is optimized for SAP BTP solution architects who need a realistic path from workshop prototype to production value, while giving developers clear implementation sequencing.
-
-The sequence is intentionally designed to build business trust in stages. Early phases validate technical reliability; later phases validate whether planners and approvers actually accept the recommendations in live process conditions.
-
-| Phase | Timeline | Scope | Primary Owner | Exit Criteria |
-|------|----------|-------|---------------|---------------|
-| **Phase 1: Validation** | Weeks 1-2 | Notebook-based scoring on historical data | Solution Architect + Data/Process SME | Baseline accuracy and risk policy agreed |
-| **Phase 2: Technical Pilot** | Weeks 3-6 | Read-only integration with live S/4HANA data, scoring service hardening | App Developer + Integration Specialist | Stable inference, trace logging, role-based access, and decision evidence in UI |
-| **Phase 3: Business Pilot** | Weeks 7-10 | Planner-facing dashboard + mitigation proposal workflow | Product Owner + Supply Chain Lead | Measurable reduction in risk-to-action cycle time and acceptable recommendation adoption |
-| **Phase 4: Controlled Rollout** | Weeks 11-13 | Event-driven scoring + approval-governed agent recommendations | Enterprise Architect + Operations | Governance sign-off, operational handover, and monitored override patterns |
-
-### What Must Be Live vs. Can Stay Mocked in Pilot
-
-| Capability | Pilot Recommendation |
-|-----------|----------------------|
-| Prediction endpoint (`sap-rpt-1`) | Live |
-| S/4 master + transactional feed | Live read-only |
-| Alternative supplier/capacity signal | Live if available, otherwise mocked with explicit caveat |
-| Agentic proposal generation | Start constrained and advisory-only |
-| Final sourcing execution | Keep manual/approval-driven |
-
----
-
-## Governance and Decision Rights Model
-
-This model is not only a compliance device. It is also an adoption device: it lets the business experience AI as decision support within clear authority boundaries, rather than as an opaque replacement for expert judgment.
+### 5.3 Governance and Decision Rights
 
 | Layer | Responsibility | Typical Technology | Authority Level |
 |------|----------------|--------------------|-----------------|
@@ -696,52 +455,39 @@ This model is not only a compliance device. It is also an adoption device: it le
 | Approval layer | Accept/reject sourcing-impacting decision | Workflow/BPA + approver role | Authoritative |
 | Execution layer | Perform ERP process change | S/4-integrated app/service | Post-approval only |
 
-### Trade-off Lens for Architecture Design Reviews
+### 5.4 Suggested Rollout Logic
 
-| Priority | Lean Toward |
-|---------|-------------|
-| Lowest latency and predictable behavior | Deterministic + predictive scoring |
-| Highest adaptability across edge cases | Agentic recommendations with strict tool and approval guardrails |
-| Strongest compliance posture | Human approval gates + full trace logging |
-| Fastest business adoption | Hybrid model: predictive automation + human decision checkpoints |
+The most defensible rollout path is:
 
-## BTP Services Summary
+1. start with advisory prediction
+2. add decision evidence and human approval
+3. introduce agentic mitigation only for the subset of cases where static rules are insufficient
+4. write back approved actions into S/4 only after the operating model is trusted
 
-| Service | Role in This Solution |
-|---------|----------------------|
-| **SAP AI Core** | Hosts SAP-RPT-1 model and LLM deployments |
-| **SAP-RPT-1** | Tabular prediction for delay risk scoring |
-| **Gen AI Hub** | LLM orchestration for agent reasoning |
-| **CAP** | Application framework for APIs and UIs |
-| **HANA Cloud** | Persistence for context, predictions, proposals |
-| **Integration Suite** | Data pipeline from S/4HANA |
-| **Event Mesh** | Real-time PO event distribution |
-| **XSUAA** | Authentication and authorization |
-| **Destination Service** | Secure connectivity to S/4HANA |
-| **Build Process Automation** | Approval workflows |
-| **Cloud Logging** | Centralized observability |
-| **Alert Notification** | Proactive alerting |
+### 5.5 Security and Data Governance (Out of Scope)
+
+This workshop focuses on functional architecture, not security architecture. However, production implementations must address:
+
+- **Data classification:** Supplier performance data, pricing, and lead times may be commercially sensitive. Classify data appropriately and enforce access controls in both HANA Cloud and CAP.
+- **Data residency:** For multinational deployments, determine where prediction and audit data may be stored and processed. BTP region selection and HANA Cloud instance placement matter.
+- **Cross-boundary data flow:** The S/4-to-BTP replication introduces a data boundary. Ensure the integration pattern complies with any internal data governance policies.
+- **LLM data handling:** If the agent layer uses Gen AI Hub with external model providers, understand what data is sent to the model and whether it leaves the SAP trust boundary.
+
+These considerations are production requirements, not workshop scope. Flag them early in any client engagement.
 
 ---
 
 ## Final Guidance
 
-### Start Simple, Add Complexity Incrementally
-
-1. **Phase 1**: Batch scoring on historical data (prove model accuracy)
-2. **Phase 2**: Event-driven scoring on new POs (prove operational value)
-3. **Phase 3**: Agent-based mitigation (prove business impact)
-4. **Phase 4**: Full automation with governance (scale)
-
 ### Key Architecture Principles
 
-1. **AI is a capability, not the architecture** — Embed AI into existing CAP patterns
+1. **AI is a capability, not the architecture** — Embed AI into a governed extension pattern
 2. **Observability by design** — Log every prediction and agent step
 3. **Human-in-the-loop for action** — Recommend, don't execute autonomously
 4. **Trust is designed, not assumed** — Evidence, approval paths, and auditability matter as much as model quality
-5. **Data freshness matters** — Stale data → inaccurate predictions
+5. **Data freshness matters** — Stale data leads to weak decisions
 6. **Start with the business outcome** — "$X avoided downtime" beats "N predictions made"
 
 ---
 
-*This architecture guide is designed to support a 45-minute presenter-led discussion. Use the diagrams and tables as conversation anchors, and adapt the depth based on audience questions.*
+*This architecture guide is intended as a participant-facing reference for the recommended production architecture behind the use case.*
