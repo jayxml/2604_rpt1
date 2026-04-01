@@ -9,9 +9,9 @@ A hands-on workshop demonstrating how to predict supplier delivery delays using 
 | Part | Duration | Description |
 |------|----------|-------------|
 | Presentation | 1 hour | Use case, SAP-RPT-1 model, code-based agents |
-| Part 1 Hands-On | ~1 hour | Predictive delay scoring with SAP-RPT-1 |
-| Part 1b Optional Lab | ~45 min | Workshop-grade model evaluation and baseline benchmarking |
-| Part 2 Hands-On | ~1 hour | Agentic mitigation with ReAct pattern |
+| Exercise 1A | ~1 hour | Predictive delay scoring with SAP-RPT-1 |
+| Exercise 1B Optional Lab | ~45 min | Workshop-grade model evaluation and baseline benchmarking |
+| Exercise 2 | ~1 hour | Agentic mitigation with ReAct pattern |
 | Architecture Discussion | 45 min | Production deployment on SAP BTP |
 | Survey & Wrap-up | 15 min | Feedback and next steps |
 
@@ -25,20 +25,20 @@ This workshop shows how to:
 3. **Automate** mitigation proposals using AI agents
 4. **Govern** decisions with human-in-the-loop approval
 
-An optional Part 1b extends the base use case with workshop-grade model evaluation, comparing regression and intervention-risk classification formulations against a small set of open-source baselines.
+An optional Exercise 1B extends the base use case with workshop-grade model evaluation, comparing regression and intervention-risk classification formulations against a small set of open-source baselines.
 
 ## Repository Contents
 
 ```
-├── part1_jit_prediction.ipynb    # Hands-on: SAP-RPT-1 prediction
-├── part1b_jit_model_evaluation.ipynb  # Optional lab: evaluation and benchmarking
-├── part2_jit_agent.ipynb         # Hands-on: Agentic mitigation
+├── exercise1a_jit_prediction.ipynb    # Exercise 1A: SAP-RPT-1 prediction
+├── exercise1b_jit_model_evaluation.ipynb  # Exercise 1B: evaluation and benchmarking
+├── exercise2_jit_agent.ipynb         # Exercise 2: Agentic mitigation
 ├── architecture_discussion.md    # Production architecture guide
 └── data/
     ├── historical_po_data.csv    # 600 historical POs with outcomes
-    ├── historical_po_data_part1b.csv  # Extended evaluation dataset for Part 1b
+    ├── historical_po_data_part1b.csv  # Extended evaluation dataset for Exercise 1B
     ├── new_po_prediction.csv     # Sample PO for prediction
-    ├── new_po_prediction_part1b.csv  # Multi-scenario prediction set for Part 1b
+    ├── new_po_prediction_part1b.csv  # Multi-scenario prediction set for Exercise 1B
     └── alt_supplier_table.csv    # Alternative supplier options
 ```
 
@@ -60,8 +60,8 @@ AICORE_CLIENT_ID=...
 AICORE_CLIENT_SECRET=...
 AICORE_BASE_URL=https://...
 AICORE_RESOURCE_GROUP=...
-RPT1_DEPLOYMENT_URL=https://...      # Part 1
-ORCH_DEPLOYMENT_URL=https://...      # Part 2
+RPT1_DEPLOYMENT_URL=https://...      # Exercise 1A / 1B
+ORCH_DEPLOYMENT_URL=https://...      # Exercise 2
 ```
 
 3. Open the notebooks and follow the step-by-step instructions

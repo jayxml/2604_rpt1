@@ -4,8 +4,9 @@
 >
 > | Part | Format | What you will do |
 > |------|--------|------------------|
-> | **Part 1 — Hands-On Exercise** | Self-paced | Build predictive delay scoring with SAP-RPT-1 |
-> | **Part 2 — Hands-On Exercise** | Self-paced | Extend to agentic mitigation with ReAct pattern |
+> | **Exercise 1A — Hands-On Exercise** | Self-paced | Build predictive delay scoring with SAP-RPT-1 |
+> | **Exercise 1B — Optional Lab** | Self-paced | Evaluate regression and intervention-risk classification approaches |
+> | **Exercise 2 — Hands-On Exercise** | Self-paced | Extend to agentic mitigation with ReAct pattern |
 > | **Part 3 — Architecture Discussion** | Presenter-led | Walk through production architecture patterns for JIT risk management on SAP BTP |
 
 ---
