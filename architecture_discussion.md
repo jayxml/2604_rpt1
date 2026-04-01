@@ -46,6 +46,55 @@ This workshop separates architecture choices that are often mixed together in en
 
 > Principle: do not optimize for maximum AI sophistication. Optimize for minimum architecture that reliably delivers business value with clear governance.
 
+## Human Adoption as an Architecture Constraint
+
+In enterprise AI programs, the binding constraint is often not deployment complexity but trust. A BTP workshop can teach a developer how to deploy `sap-rpt-1` on AI Core, but it does not by itself persuade a planner, buyer, or procurement manager to rely on a prediction over established operating judgment.
+
+This does not make the challenge non-technical. It means the architecture must be designed to reduce perceived risk, preserve accountability, and make AI-assisted decisions inspectable.
+
+### What users are actually evaluating
+
+- Is this recommendation understandable enough to act on?
+- If the prediction is wrong, who is accountable?
+- Can I override it without losing control of the process?
+- Has this system earned trust through visible outcomes over time?
+
+### Architecture implications for SAP BTP solutions
+
+- Keep AI outputs advisory before they become operationally binding
+- Show evidence, not just a score: confidence, relevant historical patterns, and policy rationale
+- Preserve decision rights with workflow-based approval for sourcing-impacting actions
+- Log predictions, context, and outcomes so the business can inspect and challenge the system
+- Roll out in phases so users calibrate trust through pilot results rather than executive mandate
+
+> Design principle: if the business experiences the solution as a black box, adoption will stall even when model accuracy is acceptable. Trust must be designed into the architecture, workflow, and user experience.
+
+### Trust Chain for BTP AI Adoption
+
+```mermaid
+flowchart TD
+   A["1. Human Judgment + Business Policy<br/>Sets operating boundaries"]
+   B["2. Prediction Layer<br/>SAP-RPT-1 on AI Core produces signal"]
+   C["3. Evidence Layer<br/>Confidence, drivers, comparable cases"]
+   D["4. Approval Layer<br/>Workflow / BPA confirms authority"]
+   E["5. Execution Layer<br/>CAP / S4 process performs action"]
+   F["6. Outcome Feedback<br/>Audit, overrides, actual results"]
+
+   A --> B --> C --> D --> E --> F
+
+   classDef policy fill:#f3efe6,stroke:#7a5c2e,color:#2b2113,stroke-width:1px;
+   classDef ai fill:#e6f0f8,stroke:#2f5d7c,color:#102a3a,stroke-width:1px;
+   classDef evidence fill:#eef6ea,stroke:#4f7a3a,color:#1d3313,stroke-width:1px;
+   classDef action fill:#f8ecec,stroke:#8a4b4b,color:#3c1717,stroke-width:1px;
+
+   class A policy;
+   class B ai;
+   class C evidence;
+   class D,E,F action;
+```
+
+The model contributes predictive signal, but business trust is created by the full chain around it.
+
 ---
 
 ## Scenario A: From Notebook to Production CAP Application
@@ -61,9 +110,12 @@ This workshop separates architecture choices that are often mixed together in en
 
 **What the end users need:**
 - A Fiori-style application showing current PO risk status
+- Visible decision evidence such as confidence, key risk drivers, and comparable historical cases
 - Automatic alerts when Red-tier risks are detected
 - One-click access to mitigation proposals
 - Approval workflow before sourcing changes are executed
+
+In trust-sensitive processes, this dashboard is not just a monitoring surface. It is the user-facing implementation of the Evidence Layer: the place where the business can inspect why the system is recommending action before deciding whether to approve it.
 
 ### Notebook → Production: What Changes?
 
@@ -588,6 +640,8 @@ Week 6:  Full rollout with all POs
 | **Prediction Accuracy** | >80% within ±1 day | Compare predictions to actuals |
 | **Risk Detection Rate** | >90% Red-tier caught | True positives / actual delays |
 | **Mitigation Adoption** | >60% proposals approved | Approved / Generated |
+| **Recommendation Override Rate** | Track by persona and supplier segment | Overrides / total recommendations |
+| **Override Reason Coverage** | >90% overrides coded with reason | Overrides with reason / all overrides |
 | **Time to Detection** | <4 hours from PO creation | Event timestamp to alert |
 | **Line-Down Avoidance** | Track avoided incidents | Mitigated POs that would have delayed |
 
@@ -598,12 +652,14 @@ Week 6:  Full rollout with all POs
 
 This blueprint is optimized for SAP BTP solution architects who need a realistic path from workshop prototype to production value, while giving developers clear implementation sequencing.
 
+The sequence is intentionally designed to build business trust in stages. Early phases validate technical reliability; later phases validate whether planners and approvers actually accept the recommendations in live process conditions.
+
 | Phase | Timeline | Scope | Primary Owner | Exit Criteria |
 |------|----------|-------|---------------|---------------|
 | **Phase 1: Validation** | Weeks 1-2 | Notebook-based scoring on historical data | Solution Architect + Data/Process SME | Baseline accuracy and risk policy agreed |
-| **Phase 2: Technical Pilot** | Weeks 3-6 | Read-only integration with live S/4HANA data, scoring service hardening | App Developer + Integration Specialist | Stable inference, trace logging, and role-based access |
-| **Phase 3: Business Pilot** | Weeks 7-10 | Planner-facing dashboard + mitigation proposal workflow | Product Owner + Supply Chain Lead | Measurable reduction in risk-to-action cycle time |
-| **Phase 4: Controlled Rollout** | Weeks 11-13 | Event-driven scoring + approval-governed agent recommendations | Enterprise Architect + Operations | Governance sign-off and operational handover complete |
+| **Phase 2: Technical Pilot** | Weeks 3-6 | Read-only integration with live S/4HANA data, scoring service hardening | App Developer + Integration Specialist | Stable inference, trace logging, role-based access, and decision evidence in UI |
+| **Phase 3: Business Pilot** | Weeks 7-10 | Planner-facing dashboard + mitigation proposal workflow | Product Owner + Supply Chain Lead | Measurable reduction in risk-to-action cycle time and acceptable recommendation adoption |
+| **Phase 4: Controlled Rollout** | Weeks 11-13 | Event-driven scoring + approval-governed agent recommendations | Enterprise Architect + Operations | Governance sign-off, operational handover, and monitored override patterns |
 
 ### What Must Be Live vs. Can Stay Mocked in Pilot
 
@@ -618,6 +674,8 @@ This blueprint is optimized for SAP BTP solution architects who need a realistic
 ---
 
 ## Governance and Decision Rights Model
+
+This model is not only a compliance device. It is also an adoption device: it lets the business experience AI as decision support within clear authority boundaries, rather than as an opaque replacement for expert judgment.
 
 | Layer | Responsibility | Typical Technology | Authority Level |
 |------|----------------|--------------------|-----------------|
@@ -669,8 +727,9 @@ This blueprint is optimized for SAP BTP solution architects who need a realistic
 1. **AI is a capability, not the architecture** — Embed AI into existing CAP patterns
 2. **Observability by design** — Log every prediction and agent step
 3. **Human-in-the-loop for action** — Recommend, don't execute autonomously
-4. **Data freshness matters** — Stale data → inaccurate predictions
-5. **Start with the business outcome** — "$X avoided downtime" beats "N predictions made"
+4. **Trust is designed, not assumed** — Evidence, approval paths, and auditability matter as much as model quality
+5. **Data freshness matters** — Stale data → inaccurate predictions
+6. **Start with the business outcome** — "$X avoided downtime" beats "N predictions made"
 
 ---
 
