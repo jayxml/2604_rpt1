@@ -135,34 +135,52 @@ In trust-sensitive processes, this dashboard is not just a monitoring surface. I
 
 ### A.1 Target Solution Architecture (High Level)
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                     Presentation Layer                          │
-│              SAP Fiori / SAP Build Apps                         │
-├─────────────────────────────────────────────────────────────────┤
-│                     Application Layer                           │
-│               CAP Service (Node.js / Java)                      │
-│    ┌────────────────┐  ┌─────────────────┐  ┌──────────────┐   │
-│    │ /assess-risk   │  │ /get-mitigation │  │ /approve     │   │
-│    └───────┬────────┘  └────────┬────────┘  └──────┬───────┘   │
-│            │     Risk Scoring Engine     │         │            │
-│            v                             v         v            │
-│    ┌──────────────┐          ┌─────────────────────────┐       │
-│    │  SAP-RPT-1   │          │   Agent Orchestrator    │       │
-│    │  Inference   │          │   (LLM + Tools)         │       │
-│    └──────┬───────┘          └──────────┬──────────────┘       │
-├───────────┼──────────────────────────────┼──────────────────────┤
-│           v        SAP AI Services       v                      │
-│    ┌────────────────────────────────────────────────┐          │
-│    │  AI Core · SAP-RPT-1 · Gen AI Hub · Claude     │          │
-│    └────────────────────────────────────────────────┘          │
-├─────────────────────────────────────────────────────────────────┤
-│                  Data & Integration Layer                       │
-│    S/4HANA APIs · Integration Suite · HANA Cloud (optional)     │
-├─────────────────────────────────────────────────────────────────┤
-│                  Platform & Security Layer                      │
-│         XSUAA · Destinations · Service Bindings                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+   subgraph PL["Presentation Layer"]
+      UI["SAP Fiori / SAP Build Apps"]
+   end
+
+   subgraph AL["Application Layer"]
+      CAP["CAP Service<br/>Node.js / Java"]
+      AR["/assess-risk"]
+      GM["/get-mitigation"]
+      AP["/approve"]
+      RS["Risk Scoring Engine"]
+      AO["Agent Orchestrator<br/>LLM + Tools"]
+
+      CAP --> AR
+      CAP --> GM
+      CAP --> AP
+      AR --> RS
+      GM --> AO
+      AP --> AO
+   end
+
+   subgraph AI["SAP AI Services"]
+      AIC["AI Core · SAP-RPT-1<br/>Gen AI Hub · Claude"]
+   end
+
+   subgraph DI["Data & Integration Layer"]
+      DATA["S/4HANA APIs<br/>Integration Suite<br/>HANA Cloud (optional)"]
+   end
+
+   subgraph PS["Platform & Security Layer"]
+      SEC["XSUAA · Destinations<br/>Service Bindings"]
+   end
+
+   UI --> CAP
+   RS --> AIC
+   AO --> AIC
+   CAP --> DATA
+   CAP --> SEC
+
+   classDef layer fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
+   classDef app fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
+   classDef service fill:#edf6ed,stroke:#4d7a4d,color:#183218,stroke-width:1px;
+
+   class UI,CAP,AR,GM,AP,RS,AO app;
+   class AIC,DATA,SEC service;
 ```
 
 **SAP BTP value mapping:**
@@ -418,29 +436,21 @@ return message
 
 ### B.4 Event-Driven Scoring Architecture
 
-```text
-┌─────────────────┐     ┌───────────────┐     ┌─────────────────┐
-│   S/4HANA       │────>│  Event Mesh   │────>│   CAP Service   │
-│  PO Created     │     │  (Topic)      │     │  Event Handler  │
-└─────────────────┘     └───────────────┘     └────────┬────────┘
-                                                       │
-                                                       v
-                                              ┌─────────────────┐
-                                              │  Risk Scoring   │
-                                              │  (SAP-RPT-1)    │
-                                              └────────┬────────┘
-                                                       │
-                                                       v
-                                              ┌─────────────────┐
-                                              │  If Red + Crit  │
-                                              │  → Agent Flow   │
-                                              └────────┬────────┘
-                                                       │
-                                                       v
-                                              ┌─────────────────┐
-                                              │  Notification   │
-                                              │  to SC Manager  │
-                                              └─────────────────┘
+```mermaid
+flowchart LR
+   S4["S/4HANA<br/>PO Created"] --> EM["SAP Event Mesh<br/>Topic"]
+   EM --> CAP["CAP Service<br/>Event Handler"]
+   CAP --> RS["Risk Scoring<br/>SAP-RPT-1"]
+   RS --> AG["If Red + Critical<br/>Agent Flow"]
+   AG --> NT["Notification<br/>to SC Manager"]
+
+   classDef source fill:#f7f3ea,stroke:#8a6d3b,color:#2f2417,stroke-width:1px;
+   classDef app fill:#eaf3fb,stroke:#356a8a,color:#173042,stroke-width:1px;
+   classDef action fill:#edf6ed,stroke:#4d7a4d,color:#183218,stroke-width:1px;
+
+   class S4,EM source;
+   class CAP,RS app;
+   class AG,NT action;
 ```
 
 ### B.5 Trade-offs Discussion
