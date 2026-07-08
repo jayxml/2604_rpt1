@@ -1,4 +1,6 @@
-# Predictive JIT Supply Chain Risk with SAP BTP
+# SAP-RPT-1 in Action: Architecting Agentic Supply Chain on SAP Business AI Platform
+
+**Use case:** Just-In-Time (JIT) Supply Chain Risk
 
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Python](https://img.shields.io/badge/python-3.9%2B-blue)
@@ -15,6 +17,7 @@ A hands-on workshop demonstrating how to predict supplier delivery delays using 
 - [Workshop Overview](#workshop-overview)
 - [Business Scenario](#business-scenario)
 - [What You'll Build](#what-youll-build)
+- [The Decision Card](#the-decision-card)
 - [Repository Contents](#repository-contents)
 - [Prerequisites](#prerequisites)
 - [Running the Workshop](#running-the-workshop)
@@ -52,6 +55,22 @@ This workshop shows how to:
 | **1A** | A delay-prediction pipeline that scores new purchase orders and maps them to Green/Amber/Red risk tiers with a mitigation proposal | SAP-RPT-1 on SAP AI Core |
 | **1B** *(optional)* | A workshop-grade evaluation that compares SAP-RPT-1 against open-source baselines across regression and intervention-risk classification | SAP-RPT-1 + scikit-learn benchmarking |
 | **2** | A ReAct agent that reviews high-risk POs, reasons over multiple suppliers, and produces a prioritized mitigation plan behind a human-approval gate | Gen AI Hub orchestration (Claude 4.5 Sonnet) + SAP-RPT-1 |
+
+## The Decision Card
+
+The single takeaway to leave with: **Rules -> Predict -> Reason.** Every automation choice sits on this ladder — climb only as high as the decision requires.
+
+| Rung | Use when the decision is... | SAP capability | What you must govern |
+|------|------------------------------|----------------|----------------------|
+| **1. Rules** | Stable and policy-driven — you can write the logic down | Business rules / thresholds | An audit trail |
+| **2. Predict** | A signal you can't hand-code, from structured/tabular ERP data | **SAP-RPT-1** on SAP AI Core | Model accuracy and drift |
+| **3. Reason** | Adaptive and multi-criteria — the next step depends on what you learn | **Agent** on Gen AI Hub | A reasoning trace + human approval |
+
+**The rule of the ladder:** *the higher you climb, the more you govern.* A rules engine needs an audit log; an agent needs a human in the loop.
+
+In this workshop you build all three rungs: **Rules** (the Green/Amber/Red policy), **Predict** (SAP-RPT-1 delay scoring), and **Reason** (the ReAct mitigation agent).
+
+> **Your turn:** Pick one decision from your own landscape. Which rung does it belong on? What would you have to govern to run it safely?
 
 ## Repository Contents
 
