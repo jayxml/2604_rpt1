@@ -8,9 +8,13 @@
 
 A hands-on workshop demonstrating how to predict supplier delivery delays using SAP AI Core (SAP-RPT-1) and build agentic mitigation workflows with SAP Gen AI Hub.
 
+This workshop uses a JIT supply chain risk scenario to teach when to use **rules**, **prediction**, and **agentic reasoning** on SAP Business AI Platform.
+
 ![Reference architecture](assets/architecture.svg)
 
 > **Note:** Every exercise connects to the **live** SAP-RPT-1 model and, in Exercise 2, the live Gen AI Hub orchestration service. There is no offline or simulated mode — valid SAP AI Core credentials are required to run the notebooks.
+>
+> **Workshop-grade, not production-grade:** the notebooks are simplified for hands-on learning. The production architecture questions are addressed after the lab in the instructor-led **Architecture Playbook** deep dive.
 
 ## Contents
 
@@ -58,7 +62,7 @@ This workshop shows how to:
 
 ## The Decision Card
 
-The single takeaway to leave with: **Rules -> Predict -> Reason.** Every automation choice sits on this ladder — climb only as high as the decision requires.
+The single takeaway to leave with: **Rules -> Predict -> Reason.** Start with rules. Add prediction when structured business data can produce a useful signal. Add reasoning only when the workflow needs adaptive judgment.
 
 | Rung | Use when the decision is... | SAP capability | What you must govern |
 |------|------------------------------|----------------|----------------------|
@@ -66,11 +70,18 @@ The single takeaway to leave with: **Rules -> Predict -> Reason.** Every automat
 | **2. Predict** | A signal you can't hand-code, from structured/tabular ERP data | **SAP-RPT-1** on SAP AI Core | Model accuracy and drift |
 | **3. Reason** | Adaptive and multi-criteria — the next step depends on what you learn | **Agent** on Gen AI Hub | A reasoning trace + human approval |
 
-**The rule of the ladder:** *the higher you climb, the more you govern.* A rules engine needs an audit log; an agent needs a human in the loop.
+**The rule of the ladder:** *Climb only as high as the decision requires — and the higher you climb, the more you govern.* A rules engine needs an audit log; an agent needs a human in the loop.
 
 In this workshop you build all three rungs: **Rules** (the Green/Amber/Red policy), **Predict** (SAP-RPT-1 delay scoring), and **Reason** (the ReAct mitigation agent).
 
-> **Your turn:** Pick one decision from your own landscape. Which rung does it belong on? What would you have to govern to run it safely?
+### Use Case Qualification
+
+Pick one decision from your own landscape and ask:
+
+1. Is the decision stable and policy-driven? -> Start with **Rules**.
+2. Is there structured historical business data and a measurable target? -> Consider **Predict** with SAP-RPT-1.
+3. Does the workflow require adaptive investigation, prioritization, or trade-off reasoning? -> Consider **Reason** with an agent.
+4. What must be governed before this can run safely? -> Audit, model quality, traceability, approval, and monitoring.
 
 ## Repository Contents
 
